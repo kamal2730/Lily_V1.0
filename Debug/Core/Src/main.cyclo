@@ -1,0 +1,13 @@
+../Core/Src/main.c:97:6:delay_us	2
+../Core/Src/main.c:101:6:HAL_ADC_ConvCpltCallback	2
+../Core/Src/main.c:107:6:ReadSensors	6
+../Core/Src/main.c:143:5:main	1
+../Core/Src/main.c:196:6:SystemClock_Config	3
+../Core/Src/main.c:242:13:MX_ADC1_Init	4
+../Core/Src/main.c:311:13:MX_I2C1_Init	2
+../Core/Src/main.c:345:13:MX_TIM1_Init	10
+../Core/Src/main.c:432:13:MX_TIM2_Init	4
+../Core/Src/main.c:477:13:MX_USART1_UART_Init	2
+../Core/Src/main.c:508:13:MX_DMA_Init	1
+../Core/Src/main.c:529:13:MX_GPIO_Init	1
+../Core/Src/main.c:587:6:Error_Handler	1
