@@ -21,7 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdlib.h"
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +32,27 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
+I2C_HandleTypeDef hi2c1;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
+
+UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
+
+/* USER CODE BEGIN PV */
 
 //SENSOR READING FUNCTION
 volatile int SensorIndex=0;
@@ -54,26 +76,23 @@ volatile uint32_t IR_ON[9];
 volatile uint32_t IR_OFF[9];
 volatile uint32_t SensorValues[9];
 volatile uint32_t sensors_time;
-/* USER CODE END PD */
+volatile uint32_t run_time;
+volatile uint32_t LastPIDTime;
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
+//PID Variables
+const int thresh=195;
+int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
+double Kp = 2.0f, Ki = 0.0f, Kd = 0.5f;
+int position,error;
+int setpoint=0;
+uint8_t base_speed = 60;
+uint8_t turn_speed = 50;
+int turn=1;
 
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
-
-I2C_HandleTypeDef hi2c1;
-
-TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
-
-UART_HandleTypeDef huart1;
-DMA_HandleTypeDef hdma_usart1_rx;
-
-/* USER CODE BEGIN PV */
+double P, I, D;
+double correction = 0, lastInput = 0;
+double lastTime = 0;
+double integralMin = -25.0, integralMax = 25.0;
 
 /* USER CODE END PV */
 
@@ -90,6 +109,9 @@ static void MX_USART1_UART_Init(void);
 void ReadSensors();
 void delay_us(uint32_t us);
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
+int line_data(void);
+void computePID(int32_t input);
+void setMotorSpeed(uint8_t motor, int32_t speed);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -130,9 +152,67 @@ void ReadSensors(){
 		IR_ON[SensorIndex]=adc_buf;
 		if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)){__HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);}
 
-		SensorValues[SensorIndex]=IR_OFF[SensorIndex]-IR_ON[SensorIndex];
+		SensorValues[SensorIndex]=abs(IR_OFF[SensorIndex]-IR_ON[SensorIndex]);
 
 	}
+}
+int line_data(void){
+	int sum = 0;
+	double weighted_sum = 0;
+	int onLine = 0;
+	for(int i=0;i<9;i++){
+		if(SensorValues[i]< thresh){
+			weighted_sum += weights[i];
+			sum += 1;
+            onLine = 1;
+		}
+	}
+	 if (!onLine) {
+		 return 255;  // Line lost condition
+	 }
+
+	 return (int)(weighted_sum/sum);
+
+}
+void computePID(int32_t input) {
+	P = Kp * error;
+	I += Ki * error * (HAL_GetTick()-LastPIDTime);
+	if (I > integralMax) I = integralMax;
+	if (I < integralMin) I = integralMin;
+	D = Kd * (input - lastInput) / (HAL_GetTick()-LastPIDTime);
+
+	correction = P + I + D;
+	lastInput = input;
+	LastPIDTime = HAL_GetTick();
+	correction = floor(correction);
+	setMotorSpeed(0, base_speed - correction);
+	setMotorSpeed(1, base_speed + correction);
+
+}
+void setMotorSpeed(uint8_t motor, int32_t speed)
+{
+	// tim1 ch1- left front, ch2- left back, ch3-right front, ch4- right back
+    uint16_t pwm = abs(speed);
+    if (pwm > 200) pwm = 200;  // Limit max speed
+
+    if (motor == 0) {  // Left motor
+        if (speed < 0) {
+            TIM1->CCR3 = pwm;
+            TIM1->CCR4 = 0;
+        } else {
+            TIM1->CCR3 = 0;
+            TIM1->CCR4 = pwm;
+        }
+    }
+    else if (motor == 1) {  // Right motor
+        if (speed < 0) {
+            TIM1->CCR2 = pwm;
+            TIM1->CCR1 = 0;
+        } else {
+            TIM1->CCR2 = 0;
+            TIM1->CCR1 = pwm;
+        }
+    }
 }
 /* USER CODE END 0 */
 
@@ -173,6 +253,14 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim2);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+
+  // Start PWM for motors
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -182,6 +270,29 @@ int main(void)
 	  uint32_t start_time = HAL_GetTick();
 	  ReadSensors();
 	  sensors_time = HAL_GetTick()-start_time;
+
+	  position=line_data();
+	  if(position>20 && position!=255){turn=1;
+	  }else if(position<-20){turn=-1;}
+
+	  while (position ==255){
+		  LastPIDTime=HAL_GetTick();
+		  ReadSensors();
+		  position=line_data();
+		  if (turn == 1) { // We were heading into a right turn
+			  setMotorSpeed(0, turn_speed);
+			  setMotorSpeed(1, -turn_speed);
+		  } else if (turn == -1) { // We were heading into a left turn
+			  setMotorSpeed(0, -turn_speed);
+			  setMotorSpeed(1, turn_speed);
+		  }
+	  }
+	  if(position>20 && position!=255){turn=1;
+	  }else if(position<-20){turn=-1;}
+
+	  error = -(position);
+	  computePID(position);
+	  run_time=HAL_GetTick()-start_time;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
