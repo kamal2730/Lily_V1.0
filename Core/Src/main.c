@@ -72,8 +72,6 @@ uint32_t SensorAdcChannel[9] = {
 };
 volatile int ADC_DONE=0;
 volatile uint32_t adc_buf=0;
-volatile uint32_t IR_ON[9];
-volatile uint32_t IR_OFF[9];
 volatile uint32_t SensorValues[9];
 volatile uint32_t sensors_time;
 volatile uint32_t run_time;
@@ -133,26 +131,15 @@ void ReadSensors(){
 		ADC_Config.Rank=1;
 		ADC_Config.SamplingTime=ADC_SAMPLETIME_480CYCLES;
 		HAL_ADC_ConfigChannel(&hadc1, &ADC_Config);
-
-		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], RESET);
-		delay_us(50);
-		HAL_ADC_Stop_DMA(&hadc1);
-		ADC_DONE=0;
-		HAL_ADC_Start_DMA(&hadc1, (uint32_t *)&adc_buf, 1);
-		while(ADC_DONE==0);
-		IR_OFF[SensorIndex]=adc_buf;
-		if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)){__HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);}
-
 		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], SET);
-		delay_us(50);
+		delay_us(200);
 		HAL_ADC_Stop_DMA(&hadc1);
 		ADC_DONE=0;
 		HAL_ADC_Start_DMA(&hadc1, (uint32_t *)&adc_buf, 1);
 		while(ADC_DONE==0);
-		IR_ON[SensorIndex]=adc_buf;
+		SensorValues[SensorIndex]=adc_buf;
 		if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)){__HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);}
-
-		SensorValues[SensorIndex]=abs(IR_OFF[SensorIndex]-IR_ON[SensorIndex]);
+		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], RESET);
 
 	}
 }
