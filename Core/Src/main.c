@@ -78,7 +78,7 @@ volatile uint32_t run_time;
 volatile uint32_t LastPIDTime;
 
 //PID Variables
-const int thresh=195;
+const int thresh=500;
 int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
 double Kp = 2.0f, Ki = 0.0f, Kd = 0.5f;
 int position,error;
@@ -148,7 +148,7 @@ int line_data(void){
 	double weighted_sum = 0;
 	int onLine = 0;
 	for(int i=0;i<9;i++){
-		if(SensorValues[i]< thresh){
+		if(SensorValues[i]> thresh){
 			weighted_sum += weights[i];
 			sum += 1;
             onLine = 1;
