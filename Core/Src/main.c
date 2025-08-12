@@ -27,7 +27,12 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct __attribute__((packed)) {
+  char header_start;         // Should be '<'
+  char header_end;           // Should be '>'
+  float position;
+  uint8_t sensor_bools[9];    // 1 or 0 for each sensor
+} SimplifiedTelemetryPacket;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -78,7 +83,7 @@ volatile uint32_t run_time;
 volatile uint32_t LastPIDTime;
 
 //PID Variables
-const int thresh=500;
+const int thresh=1000;
 int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
 double Kp = 2.0f, Ki = 0.0f, Kd = 0.5f;
 int position,error;
@@ -91,6 +96,9 @@ double P, I, D;
 double correction = 0, lastInput = 0;
 double lastTime = 0;
 double integralMin = -25.0, integralMax = 25.0;
+
+
+volatile uint32_t LastWifiTime=0;
 
 /* USER CODE END PV */
 
@@ -110,6 +118,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
 int line_data(void);
 void computePID(int32_t input);
 void setMotorSpeed(uint8_t motor, int32_t speed);
+void send_telemetry_data_new(float current_position);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -147,12 +156,16 @@ int line_data(void){
 	int sum = 0;
 	double weighted_sum = 0;
 	int onLine = 0;
+	int sensbool[9]={0,0,0,0,0,0,0,0,0};
 	for(int i=0;i<9;i++){
 		if(SensorValues[i]> thresh){
+			sensbool[i]=1;
 			weighted_sum += weights[i];
 			sum += 1;
             onLine = 1;
 		}
+//		if(sensbool[3]==1 && sum==1){return 255;}
+//		if(sensbool[3]==1 && sum){if(sensbool[4]!=1 || sensbool[2]!=1){return 255;}}
 	}
 	 if (!onLine) {
 		 return 255;  // Line lost condition
@@ -200,6 +213,24 @@ void setMotorSpeed(uint8_t motor, int32_t speed)
             TIM1->CCR1 = pwm;
         }
     }
+}
+void send_telemetry_data_new(float current_position) {
+    static SimplifiedTelemetryPacket packet;
+
+    packet.header_start = '<';
+    packet.header_end = '>';
+    packet.position = current_position;
+
+    // Populate the boolean sensor array
+    for(int i = 0; i < 9; i++) {
+        if (SensorValues[i] > thresh) {
+            packet.sensor_bools[i] = 1;
+        } else {
+            packet.sensor_bools[i] = 0;
+        }
+    }
+
+    HAL_UART_Transmit(&huart1, (uint8_t*)&packet, sizeof(SimplifiedTelemetryPacket), 100);
 }
 /* USER CODE END 0 */
 
@@ -262,6 +293,8 @@ int main(void)
 	  if(position>20 && position!=255){turn=1;
 	  }else if(position<-20){turn=-1;}
 
+	  if(HAL_GetTick()-LastWifiTime>20){LastWifiTime=HAL_GetTick(); send_telemetry_data_new(position);}
+
 	  while (position ==255){
 		  LastPIDTime=HAL_GetTick();
 		  ReadSensors();
@@ -273,6 +306,7 @@ int main(void)
 			  setMotorSpeed(0, -turn_speed);
 			  setMotorSpeed(1, turn_speed);
 		  }
+		  if(HAL_GetTick()-LastWifiTime>20){LastWifiTime=HAL_GetTick(); send_telemetry_data_new(position);}
 	  }
 	  if(position>20 && position!=255){turn=1;
 	  }else if(position<-20){turn=-1;}
