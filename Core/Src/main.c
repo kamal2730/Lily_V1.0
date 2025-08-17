@@ -23,16 +23,25 @@
 /* USER CODE BEGIN Includes */
 #include "stdlib.h"
 #include "math.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 typedef struct __attribute__((packed)) {
-  char header_start;         // Should be '<'
-  char header_end;           // Should be '>'
-  float position;
-  uint8_t sensor_bools[9];    // 1 or 0 for each sensor
-} SimplifiedTelemetryPacket;
+  char      header_start;         // Should be '<'
+  char      header_end;           // Should be '>'
+  float     position;
+  uint16_t  sensor_values[9];     // Your GUI is configured for 9 sensors
+  uint8_t   status_code;
+  float     kp;
+  float     ki;
+  float     kd;
+  uint16_t  threshold;
+  uint8_t   base_speed;
+  float 	pid_error;
+  float 	pid_output;
+} TelemetryPacket;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -77,28 +86,45 @@ uint32_t SensorAdcChannel[9] = {
 };
 volatile int ADC_DONE=0;
 volatile uint32_t adc_buf=0;
+volatile uint32_t IR_ON[9];
+volatile uint32_t IR_OFF[9];
 volatile uint32_t SensorValues[9];
 volatile uint32_t sensors_time;
 volatile uint32_t run_time;
 volatile uint32_t LastPIDTime;
+volatile uint32_t signal_runtime[9];
+uint32_t max_adc[9] = {4095, 4095, 4095, 4095, 4095, 4095, 4095, 4095,4095};
 
 //PID Variables
-const int thresh=1700;
+int thresh=1300;
 int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
-double Kp = 2.0f, Ki = 0.0f, Kd = 0.5f;
+double Kp = 2.0f, Ki = 0.0f, Kd = 0.7f;
 int position,error;
 int setpoint=0;
-uint8_t base_speed = 60;
-uint8_t turn_speed = 50;
+uint8_t base_speed = 70;
+uint8_t turn_speed = 70;
 int turn=1;
 
 double P, I, D;
 double correction = 0, lastInput = 0;
 double lastTime = 0;
 double integralMin = -25.0, integralMax = 25.0;
+int threshold[9]={1000,1000,1000,1000,1000,1000,1000,1000,1000};
 
+const int CHANGE_THRESHOLD[9]={700,700,700,700,700,700,700,700,700};
+uint32_t prevValues[9]; // last ADC readings
+uint8_t lastColor[9];   // 0 = black, 1 = white
+int firstTime=1;
+const uint32_t INTERVAL_MS = 5;
+uint32_t last_update_time = 0;
 
-volatile uint32_t LastWifiTime=0;
+//WIFI
+volatile uint8_t status_to_send = 0;
+#define RX_BUFFER_SIZE 32
+uint8_t rx_buffer[RX_BUFFER_SIZE];
+uint32_t last_telemetry_time = 0; // Stores the last time we sent data
+const uint32_t TELEMETRY_INTERVAL_MS = 20;
+
 
 /* USER CODE END PV */
 
@@ -118,7 +144,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
 int line_data(void);
 void computePID(int32_t input);
 void setMotorSpeed(uint8_t motor, int32_t speed);
-void send_telemetry_data_new(float current_position);
+void storePrevValues(void);
+void detectColor(void);
+void handle_received_command(uint8_t* buffer, uint16_t len) ;
+void send_telemetry_data(float current_position,float pid_out) ;
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -133,49 +164,118 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	}
 
 }
-void ReadSensors(){
-	for(SensorIndex=0;SensorIndex<9;SensorIndex++){
-		ADC_ChannelConfTypeDef ADC_Config;
-		ADC_Config.Channel=SensorAdcChannel[SensorIndex];
-		ADC_Config.Rank=1;
-		ADC_Config.SamplingTime=ADC_SAMPLETIME_480CYCLES;
-		HAL_ADC_ConfigChannel(&hadc1, &ADC_Config);
-		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], SET);
+void ReadSensors(void)
+{
+	   int sensorIndex = 0;
+
+
+	   ADC_ChannelConfTypeDef sConfig; // sconfig to change channels
+	   //ADC_Config.SamplingTime=ADC_SAMPLETIME_480CYCLES;
+
+	   for(sensorIndex =0; sensorIndex<(9) ; sensorIndex++)
+	   {
+		   sConfig.Channel = SensorAdcChannel[sensorIndex]; // to update channels
+		   sConfig.Rank = 1; //ADC_REGULAR_RANK_1;
+		   HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
+
+	 		//ir led on
+ 		HAL_GPIO_WritePin(IR_LED_PORTS[sensorIndex], IR_LED_PINS[sensorIndex], SET);
 		delay_us(200);
-		HAL_ADC_Stop_DMA(&hadc1);
-		ADC_DONE=0;
-		HAL_ADC_Start_DMA(&hadc1, (uint32_t *)&adc_buf, 1);
-		while(ADC_DONE==0);
-		SensorValues[SensorIndex]=adc_buf;
-		if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)){__HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);}
-		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], RESET);
+	 		 HAL_ADC_Stop_DMA(&hadc1);
+	 		ADC_DONE = 0;
+
+	 	   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)&adc_buf, 1);
+
+	 	   //callback will be triggered after conversion
+	 	   // wait until conversion is complete
+	 	   while (ADC_DONE == 0);
+
+	 	  signal_runtime[sensorIndex]=adc_buf;
+	 	 // SensorValues[sensorIndex]= (max_adc[sensorIndex] - signal_runtime[sensorIndex])/10;
+
+
+		   if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)) {
+		       // Overflow happened
+		       __HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);  // clear it
+		   }
+
+		   HAL_GPIO_WritePin(IR_LED_PORTS[sensorIndex], IR_LED_PINS[sensorIndex], RESET);
 
 	}
+
+	//  print on oled - sensor data took
+
 }
-int line_data(void){
-	int sum = 0;
-	double weighted_sum = 0;
-	int onLine = 0;
-	for(int i=0;i<9;i++){
-		if(SensorValues[i]> thresh){
-			weighted_sum += weights[i];
-			sum += 1;
-            onLine = 1;
-		}
-	}
-	 if (!onLine) {
-		 return 255;  // Line lost condition
-	 }
+int line_data(void) {
+    int sum = 0;
+    double weighted_sum = 0;
+    int onLine = 0;
 
-	 return (int)(weighted_sum/sum);
+    if (firstTime == 1) {
+        firstTime++;
 
+        for (int i = 0; i < 9; i++) {
+            if (signal_runtime[i] > threshold[i]) {
+                lastColor[i] = 0;
+                weighted_sum += weights[i];
+                sum++;
+                onLine = 1;
+            } else {
+                lastColor[i] = 1;
+
+            }
+        }
+        storePrevValues();
+    }
+    else {
+        detectColor();
+
+//        for (int i = 1; i < 8; i++) {
+//            if (lastColor[i] == 0) { // Detected black
+//                if (i == 1) {
+//                    // Check edge and next neighbor
+//                    if (lastColor[0] == 1 && lastColor[2] == 1) {
+//                        lastColor[i] = 1; // Force to white
+//                    }
+//                }
+//                else if (i == 7) {
+//                    // Check previous neighbor and edge
+//                    if (lastColor[6] == 1 && lastColor[8] == 1) {
+//                        lastColor[i] = 1; // Force to white
+//                    }
+//                }
+//                else {
+//                    // General case for middle sensors
+//                    if (lastColor[i - 1] == 1 && lastColor[i + 1] == 1) {
+//                        lastColor[i] = 1; // Force to white
+//                    }
+//                }
+//            }
+//        }
+        for (int
+        		i = 0; i < 9; i++) {
+            if (lastColor[i] == 0) {
+                weighted_sum += weights[i];
+                sum++;
+                onLine = 1;
+            }
+        }
+        storePrevValues();
+    }
+
+    if (!onLine) {
+        return 255;  // Line lost condition
+    }
+
+    return (int)(weighted_sum / sum);
 }
 void computePID(int32_t input) {
 	P = Kp * error;
-	I += Ki * error * (HAL_GetTick()-LastPIDTime);
+	I += Ki * error * 5.0;
 	if (I > integralMax) I = integralMax;
 	if (I < integralMin) I = integralMin;
-	D = Kd * (input - lastInput) / (HAL_GetTick()-LastPIDTime);
+	D = Kd * (input - lastInput) / 5.0;
 
 	correction = P + I + D;
 	lastInput = input;
@@ -210,24 +310,117 @@ void setMotorSpeed(uint8_t motor, int32_t speed)
         }
     }
 }
-void send_telemetry_data_new(float current_position) {
-    static SimplifiedTelemetryPacket packet;
+void storePrevValues(void)
+{
+    for (int i = 0; i < 9; i++) {
+        prevValues[i] = signal_runtime[i];
+    }
+}
+void detectColor(void)
+{
+    ReadSensors();
+    for (int i = 0; i < 9; i++)
+    {
+        uint32_t current = signal_runtime[i];
 
+        if (current < 200) {
+            lastColor[i] = 1; // White
+        }
+        else if(current>1200){
+        	lastColor[i]=0;
+        }
+        else if (current > prevValues[i] + CHANGE_THRESHOLD[i]) {
+            lastColor[i] = 0; // Black
+        }
+        else if (current + CHANGE_THRESHOLD[i] < prevValues[i]) {
+            lastColor[i] = 1; // White
+        }
+        // else → no change → keep lastColor[i] as is
+
+        prevValues[i] = current; // update reading for next loop
+    }
+}
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    if (huart->Instance == USART1)
+    {
+        // Pass received bytes directly to your parser
+        handle_received_command(rx_buffer, Size);
+
+        // Restart reception for the next command
+        HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
+    }
+}
+void send_telemetry_data(float current_position,float pid_out) {
+    static TelemetryPacket packet;
+
+    // 1. Set header
     packet.header_start = '<';
     packet.header_end = '>';
+
+    // 2. Add the live position data
     packet.position = current_position;
 
-    // Populate the boolean sensor array
+    // 3. Fill sensor data
     for(int i = 0; i < 9; i++) {
-        if (SensorValues[i] > thresh) {
-            packet.sensor_bools[i] = 1;
-        } else {
-            packet.sensor_bools[i] = 0;
-        }
+        packet.sensor_values[i] = (uint16_t)signal_runtime[i];
     }
 
-    HAL_UART_Transmit(&huart1, (uint8_t*)&packet, sizeof(SimplifiedTelemetryPacket), 100);
+    // 4. Fill with LIVE robot state
+    packet.status_code = status_to_send;
+    packet.kp = Kp;
+    packet.ki = Ki;
+    packet.kd = Kd;
+    packet.threshold = thresh;
+    packet.base_speed = (uint8_t)base_speed;
+    packet.pid_error = -current_position;
+    packet.pid_output = pid_out;
+
+    // 5. Transmit the packet
+    HAL_UART_Transmit(&huart1, (uint8_t*)&packet, sizeof(TelemetryPacket), 100);
+
+    // 6. Reset the status code after sending
+    status_to_send = 0;
 }
+void handle_received_command(uint8_t* buffer, uint16_t len) {
+  // Create a local, null-terminated copy to work with safely.
+  char cmd_string[len + 1];
+  memcpy(cmd_string, buffer, len);
+  cmd_string[len] = '\0';
+
+  // Find the separator character ':'
+  char* colon_ptr = strchr(cmd_string, ':');
+
+  // Check if the separator was found
+  if (colon_ptr != NULL) {
+    *colon_ptr = '\0';
+    char* key = cmd_string;
+    char* value_str = colon_ptr + 1;
+    float value = atof(value_str);
+    if (strcmp(key, "KP") == 0) {
+      Kp = value;
+      status_to_send = 1;
+    } else if (strcmp(key, "KI") == 0) {
+      Ki = value;
+      status_to_send = 1;
+    } else if (strcmp(key, "KD") == 0) {
+      Kd = value;
+      status_to_send = 1;
+    } else if (strcmp(key, "TH") == 0) {
+      thresh = (uint16_t)value;
+      status_to_send = 1;
+    } else if (strcmp(key, "BS") == 0) {
+      base_speed = (uint8_t)value; // Cast to uint8_t for consistency
+      status_to_send = 1;
+    } else {
+      status_to_send = 200;
+    }
+
+  } else {
+    status_to_send = 200;
+  }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -275,42 +468,82 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
 	  uint32_t start_time = HAL_GetTick();
+	  uint32_t current_time = HAL_GetTick();
+	  if((current_time-last_update_time)>=INTERVAL_MS){
+		  last_update_time=HAL_GetTick();
 	  ReadSensors();
 	  sensors_time = HAL_GetTick()-start_time;
 
 	  position=line_data();
-	  if(position>20 && position!=255){turn=1;
-	  }else if(position<-20){turn=-1;}
+	  if(position>0 && position!=255){turn=1;
+	  }else if(position<0){turn=-1;}
 
-	  if(HAL_GetTick()-LastWifiTime>20){LastWifiTime=HAL_GetTick(); send_telemetry_data_new(position);}
+	  uint32_t last_speed_update = HAL_GetTick();
+	  turn_speed = 70; // initial
 
-	  while (position ==255){
-		  LastPIDTime=HAL_GetTick();
-		  ReadSensors();
-		  position=line_data();
-		  if (turn == 1) { // We were heading into a right turn
-			  setMotorSpeed(0, turn_speed);
-			  setMotorSpeed(1, -turn_speed);
-		  } else if (turn == -1) { // We were heading into a left turn
-			  setMotorSpeed(0, -turn_speed);
-			  setMotorSpeed(1, turn_speed);
-		  }
-		  if(HAL_GetTick()-LastWifiTime>20){LastWifiTime=HAL_GetTick(); send_telemetry_data_new(position);}
+	  uint32_t last_loop_time = HAL_GetTick(); // ms timer start
+
+	  while (position == 255) {
+	      // Run loop contents only every 5 ms
+	      if (HAL_GetTick() - last_loop_time >= 5) {
+	          last_loop_time = HAL_GetTick();
+
+	          // Control turning
+	          if (turn == 1) { // Right turn
+	              setMotorSpeed(0, turn_speed);
+	              setMotorSpeed(1, -turn_speed);
+	          } else if (turn == -1) { // Left turn
+	              setMotorSpeed(0, -turn_speed);
+	              setMotorSpeed(1, turn_speed);
+	          }
+
+	          // Gradually increase turn speed every 1 second up to 100
+	          if (HAL_GetTick() - last_speed_update >= 1000) {
+	              last_speed_update = HAL_GetTick();
+	              if (turn_speed < 100) {
+	                  turn_speed++;
+	                  if (turn_speed > 100) turn_speed = 100;
+	              }
+	          }
+
+	          // Sensor reading and position check
+	          ReadSensors();
+	          position = line_data();
+
+	          // Extra condition check
+	          if (position != 255) {
+	              int pair_found = 0;
+	              for (int i = 0; i < 8; i++) { // 0..7, check i and i+1
+	                  if (lastColor[i] == 0 && lastColor[i + 1] == 0) {
+	                      pair_found = 1;
+	                      break;
+	                  }
+	              }
+	              if (!pair_found) {
+	                  position = 255; // No two adjacent black sensors → line lost
+	              }
+	          }
+	      }
+	      while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
 	  }
-	  if(position>20 && position!=255){turn=1;
-	  }else if(position<-20){turn=-1;}
+
+
+//	  if(position>0 && position!=255){turn=1;
+//	  }else if(position<	0){turn=-1;}
 
 	  error = -(position);
 	  computePID(position);
+	  }
 	  run_time=HAL_GetTick()-start_time;
+	  while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
