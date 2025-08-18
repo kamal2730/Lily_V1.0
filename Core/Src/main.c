@@ -347,7 +347,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     if (huart->Instance == USART1)
     {
         // Pass received bytes directly to your parser
-        handle_received_command(rx_buffer, Size);
+//        handle_received_command(rx_buffer, Size);
+        handle_received_bluetooth_command(rx_buffer, Size);
 
         // Restart reception for the next command
         HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
@@ -440,7 +441,7 @@ void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
     float value = atof(value_str);
 
     switch (key) {
-        case 'k': case 'K':
+        case 'p': case 'P':
             Kp = value;
             sendok();
             break;
