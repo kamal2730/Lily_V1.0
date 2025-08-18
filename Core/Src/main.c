@@ -149,7 +149,9 @@ void detectColor(void);
 void handle_received_command(uint8_t* buffer, uint16_t len) ;
 void send_telemetry_data(float current_position,float pid_out) ;
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size);
-
+void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len);
+void sendok();
+void sendno();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -420,7 +422,56 @@ void handle_received_command(uint8_t* buffer, uint16_t len) {
     status_to_send = 200;
   }
 }
+void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
+    // Create a local, null-terminated copy
+    char cmd_string[len + 1];
+    memcpy(cmd_string, buffer, len);
+    cmd_string[len] = '\0';
 
+    // If empty, invalid
+    if (len < 2) {
+    	sendno();
+        return;
+    }
+
+    // First character is the key, rest is the value
+    char key = cmd_string[0];
+    char* value_str = &cmd_string[1];
+    float value = atof(value_str);
+
+    switch (key) {
+        case 'k': case 'K':
+            Kp = value;
+            sendok();
+            break;
+        case 'i': case 'I':
+            Ki = value;
+            sendok();
+            break;
+        case 'd': case 'D':
+            Kd = value;
+            sendok();
+            break;
+        case 'b': case 'B':
+            base_speed = (uint8_t)value;
+            sendok();
+            break;
+        case 't': case 'T':
+            thresh = (uint16_t)value;
+            sendok();
+            break;
+        default:
+        	sendno();
+            break;
+    }
+}
+
+void sendok(){
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Updated !", strlen("Updated !"), 100);
+}
+void sendno(){
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Failed Updating !", strlen("Failed Updating !"), 100);
+}
 /* USER CODE END 0 */
 
 /**
@@ -532,7 +583,7 @@ int main(void)
 	              }
 	          }
 	      }
-	      while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
+//	      while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
 	  }
 
 
@@ -543,7 +594,7 @@ int main(void)
 	  computePID(position);
 	  }
 	  run_time=HAL_GetTick()-start_time;
-	  while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
+//	  while(HAL_GetTick()-last_telemetry_time>20){last_telemetry_time=HAL_GetTick();send_telemetry_data(position,correction);}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
