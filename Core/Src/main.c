@@ -24,6 +24,7 @@
 #include "stdlib.h"
 #include "math.h"
 #include "string.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -152,6 +153,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size);
 void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len);
 void sendok();
 void sendno();
+void sendconstants();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -233,28 +235,45 @@ int line_data(void) {
     else {
         detectColor();
 
-//        for (int i = 1; i < 8; i++) {
-//            if (lastColor[i] == 0) { // Detected black
-//                if (i == 1) {
-//                    // Check edge and next neighbor
-//                    if (lastColor[0] == 1 && lastColor[2] == 1) {
-//                        lastColor[i] = 1; // Force to white
-//                    }
-//                }
-//                else if (i == 7) {
-//                    // Check previous neighbor and edge
-//                    if (lastColor[6] == 1 && lastColor[8] == 1) {
-//                        lastColor[i] = 1; // Force to white
-//                    }
-//                }
-//                else {
-//                    // General case for middle sensors
-//                    if (lastColor[i - 1] == 1 && lastColor[i + 1] == 1) {
-//                        lastColor[i] = 1; // Force to white
-//                    }
-//                }
-//            }
-//        }
+        for (int i = 1; i < 8; i++) {
+            // Case 1: Black isolated between whites → force to white
+            if (lastColor[i] == 0) {
+                if (i == 1) {
+                    if (lastColor[0] == 1 && lastColor[2] == 1) {
+                        lastColor[i] = 1;
+                    }
+                }
+                else if (i == 7) {
+                    if (lastColor[6] == 1 && lastColor[8] == 1) {
+                        lastColor[i] = 1;
+                    }
+                }
+                else {
+                    if (lastColor[i - 1] == 1 && lastColor[i + 1] == 1) {
+                        lastColor[i] = 1;
+                    }
+                }
+            }
+
+            // Case 2: White isolated between blacks → force to black
+            else if (lastColor[i] == 1) {
+                if (i == 1) {
+                    if (lastColor[0] == 0 && lastColor[2] == 0) {
+                        lastColor[i] = 0;
+                    }
+                }
+                else if (i == 7) {
+                    if (lastColor[6] == 0 && lastColor[8] == 0) {
+                        lastColor[i] = 0;
+                    }
+                }
+                else {
+                    if (lastColor[i - 1] == 0 && lastColor[i + 1] == 0) {
+                        lastColor[i] = 0;
+                    }
+                }
+            }
+        }
         for (int
         		i = 0; i < 9; i++) {
             if (lastColor[i] == 0) {
@@ -461,6 +480,9 @@ void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
             thresh = (uint16_t)value;
             sendok();
             break;
+        case 'k': case 'K':
+        	sendconstants();
+        	break;
         default:
         	sendno();
             break;
@@ -468,10 +490,24 @@ void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
 }
 
 void sendok(){
-	HAL_UART_Transmit(&huart1, (uint8_t *)"Updated !", strlen("Updated !"), 100);
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Updated !\n", strlen("Updated !\n"), 100);
 }
 void sendno(){
-	HAL_UART_Transmit(&huart1, (uint8_t *)"Failed Updating !", strlen("Failed Updating !"), 100);
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Failed Updating !\n", strlen("Failed Updating !\n"), 100);
+}
+void sendconstants(){
+	char buffer[80];  // make sure size is big enough
+
+	int kp_int = (int)(Kp * 100);
+	int ki_int = (int)(Ki * 100);
+	int kd_int = (int)(Kd * 100);
+
+	int len = sprintf(buffer, "KP=%d.%02d, KI=%d.%02d, KD=%d.%02d\r\n",
+	                  kp_int / 100, abs(kp_int % 100),
+	                  ki_int / 100, abs(ki_int % 100),
+	                  kd_int / 100, abs(kd_int % 100));
+
+	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
 }
 /* USER CODE END 0 */
 
