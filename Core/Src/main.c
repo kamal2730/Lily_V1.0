@@ -25,6 +25,7 @@
 #include "math.h"
 #include "string.h"
 #include <stdio.h>
+#include "ee.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,6 +44,12 @@ typedef struct __attribute__((packed)) {
   float 	pid_error;
   float 	pid_output;
 } TelemetryPacket;
+
+typedef struct {
+	float kp;
+	float ki;
+	float kd;
+} eeStroage_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -98,12 +105,13 @@ uint32_t max_adc[9] = {4095, 4095, 4095, 4095, 4095, 4095, 4095, 4095,4095};
 
 //PID Variables
 int thresh=1300;
-int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
+int weights[9]={-35,-26,-18,-10,0,10,18,26,35};
 double Kp = 2.0f, Ki = 0.0f, Kd = 0.7f;
 int position,error;
 int setpoint=0;
 uint8_t base_speed = 70;
-uint8_t turn_speed = 70;
+uint8_t turn_speed = 55;
+uint8_t turn_s = 70;
 int turn=1;
 
 double P, I, D;
@@ -125,7 +133,7 @@ volatile uint8_t status_to_send = 0;
 uint8_t rx_buffer[RX_BUFFER_SIZE];
 uint32_t last_telemetry_time = 0; // Stores the last time we sent data
 const uint32_t TELEMETRY_INTERVAL_MS = 20;
-
+eeStroage_t ee_ptr;
 
 /* USER CODE END PV */
 
@@ -154,6 +162,9 @@ void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len);
 void sendok();
 void sendno();
 void sendconstants();
+void load_from_flash();
+void save_to_Flash();
+void sendSensorValues();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -477,12 +488,24 @@ void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
             sendok();
             break;
         case 't': case 'T':
-            thresh = (uint16_t)value;
+
+        	turn_s = (uint16_t)value;
             sendok();
             break;
         case 'k': case 'K':
         	sendconstants();
         	break;
+        case 'v': case 'V':
+        	sendSensorValues();
+        	break;
+//        case 's':case 'S':
+//        	save_to_Flash();
+//        	sendok();
+//        	break;
+//        case 'l':case 'L':
+//        	load_from_flash();
+//        	sendok();
+//        	break;
         default:
         	sendno();
             break;
@@ -508,6 +531,23 @@ void sendconstants(){
 	                  kd_int / 100, abs(kd_int % 100));
 
 	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
+}
+void sendSensorValues(){
+	char buffer[80];
+	int len = sprintf(buffer, "%d %d %d %d %d %d %d %d %d \n",(int)signal_runtime[0],(int)signal_runtime[1],(int)signal_runtime[2],(int)signal_runtime[3],(int)signal_runtime[4],(int)signal_runtime[5],(int)signal_runtime[6],(int)signal_runtime[7],(int)signal_runtime[8]);
+	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
+}
+void save_to_Flash(){
+	ee_ptr.kp=Kp;
+	ee_ptr.ki=Ki;
+	ee_ptr.kd=Kd;
+	EE_Write();
+}
+void load_from_flash(){
+	EE_Read();
+	Kp=ee_ptr.kp;
+	Ki=ee_ptr.ki;
+	Kd=ee_ptr.kd;
 }
 /* USER CODE END 0 */
 
@@ -557,6 +597,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
   HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
+
+  EE_Init(&ee_ptr, sizeof(eeStroage_t));
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -575,7 +617,7 @@ int main(void)
 	  }else if(position<0){turn=-1;}
 
 	  uint32_t last_speed_update = HAL_GetTick();
-	  turn_speed = 70; // initial
+	  turn_speed = turn_s; // initial
 
 	  uint32_t last_loop_time = HAL_GetTick(); // ms timer start
 

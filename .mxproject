@@ -3,17 +3,19 @@ LibFiles=Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc.h;Drivers/STM32F4xx_
 
 [PreviousUsedCubeIDEFiles]
 SourceFiles=Core/Src/main.c;Core/Src/stm32f4xx_it.c;Core/Src/stm32f4xx_hal_msp.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ramfunc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c;Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c;Core/Src/system_stm32f4xx.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ramfunc.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c;Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c;Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/system_stm32f4xx.c;Core/Src/system_stm32f4xx.c;;;
-HeaderPath=Drivers/STM32F4xx_HAL_Driver/Inc;Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;Drivers/CMSIS/Device/ST/STM32F4xx/Include;Drivers/CMSIS/Include;Core/Inc;
+HeaderPath=Drivers/STM32F4xx_HAL_Driver/Inc;Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;Drivers/CMSIS/Device/ST/STM32F4xx/Include;Drivers/CMSIS/Include;Middlewares/Third_Party/NimaLTD_Driver/EE;I-CUBE-EE;Core/Inc;
 CDefines=USE_HAL_DRIVER;STM32F411xE;USE_HAL_DRIVER;USE_HAL_DRIVER;
 
 [PreviousGenFiles]
 AdvancedFolderStructure=true
-HeaderFileListSize=3
-HeaderFiles#0=../Core/Inc/stm32f4xx_it.h
-HeaderFiles#1=../Core/Inc/stm32f4xx_hal_conf.h
-HeaderFiles#2=../Core/Inc/main.h
-HeaderFolderListSize=1
-HeaderPath#0=../Core/Inc
+HeaderFileListSize=4
+HeaderFiles#0=../I-CUBE-EE/./NimaLTD.I-CUBE-EE_conf.h
+HeaderFiles#1=../Core/Inc/stm32f4xx_it.h
+HeaderFiles#2=../Core/Inc/stm32f4xx_hal_conf.h
+HeaderFiles#3=../Core/Inc/main.h
+HeaderFolderListSize=2
+HeaderPath#0=../I-CUBE-EE/.
+HeaderPath#1=../Core/Inc
 HeaderFiles=;
 SourceFileListSize=3
 SourceFiles#0=../Core/Src/stm32f4xx_it.c
@@ -22,4 +24,12 @@ SourceFiles#2=../Core/Src/main.c
 SourceFolderListSize=1
 SourcePath#0=../Core/Src
 SourceFiles=;
+
+[ThirdPartyIp]
+ThirdPartyIpNumber=1
+ThirdPartyIpName#0=NimaLTD.I-CUBE-EE.3.2.2
+
+[ThirdPartyIp#NimaLTD.I-CUBE-EE.3.2.2]
+header=Middlewares/Third_Party/NimaLTD_Driver/EE/ee.h;
+source=Middlewares/Third_Party/NimaLTD_Driver/EE/ee.c;
 
