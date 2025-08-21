@@ -25,7 +25,7 @@
 #include "math.h"
 #include "string.h"
 #include <stdio.h>
-#include "ee.h"
+//#include "ee.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -537,18 +537,18 @@ void sendSensorValues(){
 	int len = sprintf(buffer, "%d %d %d %d %d %d %d %d %d \n",(int)signal_runtime[0],(int)signal_runtime[1],(int)signal_runtime[2],(int)signal_runtime[3],(int)signal_runtime[4],(int)signal_runtime[5],(int)signal_runtime[6],(int)signal_runtime[7],(int)signal_runtime[8]);
 	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
 }
-void save_to_Flash(){
-	ee_ptr.kp=Kp;
-	ee_ptr.ki=Ki;
-	ee_ptr.kd=Kd;
-	EE_Write();
-}
-void load_from_flash(){
-	EE_Read();
-	Kp=ee_ptr.kp;
-	Ki=ee_ptr.ki;
-	Kd=ee_ptr.kd;
-}
+//void save_to_Flash(){
+//	ee_ptr.kp=Kp;
+//	ee_ptr.ki=Ki;
+//	ee_ptr.kd=Kd;
+//	EE_Write();
+//}
+//void load_from_flash(){
+//	EE_Read();
+//	Kp=ee_ptr.kp;
+//	Ki=ee_ptr.ki;
+//	Kd=ee_ptr.kd;
+//}
 /* USER CODE END 0 */
 
 /**
@@ -598,7 +598,7 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
   HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
 
-  EE_Init(&ee_ptr, sizeof(eeStroage_t));
+//  EE_Init(&ee_ptr, sizeof(eeStroage_t));
   /* USER CODE END 2 */
 
   /* Infinite loop */

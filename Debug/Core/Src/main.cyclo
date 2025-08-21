@@ -14,8 +14,6 @@
 ../Core/Src/main.c:518:6:sendno	1
 ../Core/Src/main.c:521:6:sendconstants	1
 ../Core/Src/main.c:535:6:sendSensorValues	1
-../Core/Src/main.c:540:6:save_to_Flash	1
-../Core/Src/main.c:546:6:load_from_flash	1
 ../Core/Src/main.c:558:5:main	17
 ../Core/Src/main.c:688:6:SystemClock_Config	3
 ../Core/Src/main.c:734:13:MX_ADC1_Init	4
