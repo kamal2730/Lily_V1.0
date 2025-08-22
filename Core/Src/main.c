@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include "stdlib.h"
 #include "math.h"
+#include "string.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -83,7 +85,7 @@ volatile uint32_t run_time;
 volatile uint32_t LastPIDTime;
 
 //PID Variables
-const int thresh=1700;
+int thresh=1700;
 int weights[9]={-40,-30,-20,-10,0,10,20,30,40};
 double Kp = 2.0f, Ki = 0.0f, Kd = 0.5f;
 int position,error;
@@ -99,6 +101,9 @@ double integralMin = -25.0, integralMax = 25.0;
 
 
 volatile uint32_t LastWifiTime=0;
+#define RX_BUFFER_SIZE 32
+uint8_t rx_buffer[RX_BUFFER_SIZE];
+
 
 /* USER CODE END PV */
 
@@ -119,6 +124,12 @@ int line_data(void);
 void computePID(int32_t input);
 void setMotorSpeed(uint8_t motor, int32_t speed);
 void send_telemetry_data_new(float current_position);
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size);
+void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len);
+void sendok();
+void sendno();
+void sendconstants();
+void sendSensorValues();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -140,15 +151,15 @@ void ReadSensors(){
 		ADC_Config.Rank=1;
 		ADC_Config.SamplingTime=ADC_SAMPLETIME_480CYCLES;
 		HAL_ADC_ConfigChannel(&hadc1, &ADC_Config);
-		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], SET);
-		delay_us(200);
+//		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], SET);
+//		delay_us(200);
 		HAL_ADC_Stop_DMA(&hadc1);
 		ADC_DONE=0;
 		HAL_ADC_Start_DMA(&hadc1, (uint32_t *)&adc_buf, 1);
 		while(ADC_DONE==0);
 		SensorValues[SensorIndex]=adc_buf;
 		if (__HAL_ADC_GET_FLAG(&hadc1, ADC_FLAG_OVR)){__HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);}
-		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], RESET);
+//		HAL_GPIO_WritePin(IR_LED_PORTS[SensorIndex], IR_LED_PINS[SensorIndex], RESET);
 
 	}
 }
@@ -228,6 +239,104 @@ void send_telemetry_data_new(float current_position) {
 
     HAL_UART_Transmit(&huart1, (uint8_t*)&packet, sizeof(SimplifiedTelemetryPacket), 100);
 }
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    if (huart->Instance == USART1)
+    {
+        // Pass received bytes directly to your parser
+//        handle_received_command(rx_buffer, Size);
+        handle_received_bluetooth_command(rx_buffer, Size);
+
+        // Restart reception for the next command
+        HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx_buffer, RX_BUFFER_SIZE);
+    }
+}
+void handle_received_bluetooth_command(uint8_t* buffer, uint16_t len) {
+    // Create a local, null-terminated copy
+    char cmd_string[len + 1];
+    memcpy(cmd_string, buffer, len);
+    cmd_string[len] = '\0';
+
+    // If empty, invalid
+    if (len < 2) {
+    	sendno();
+        return;
+    }
+
+    // First character is the key, rest is the value
+    char key = cmd_string[0];
+    char* value_str = &cmd_string[1];
+    float value = atof(value_str);
+
+    switch (key) {
+        case 'p': case 'P':
+            Kp = value;
+            sendok();
+            break;
+        case 'i': case 'I':
+            Ki = value;
+            sendok();
+            break;
+        case 'd': case 'D':
+            Kd = value;
+            sendok();
+            break;
+        case 'b': case 'B':
+            base_speed = (uint8_t)value;
+            sendok();
+            break;
+        case 't': case 'T':
+        	turn = (uint16_t)value;
+            sendok();
+            break;
+        case 'k': case 'K':
+        	sendconstants();
+        	break;
+        case 'v': case 'V':
+        	sendSensorValues();
+        	break;
+        case 's': case 'S':
+        	thresh=(int)value;;
+             break;
+//        case 's':case 'S':
+//        	save_to_Flash();
+//        	sendok();
+//        	break;
+//        case 'l':case 'L':
+//        	load_from_flash();
+//        	sendok();
+//        	break;
+        default:
+        	sendno();
+            break;
+    }
+}
+
+void sendok(){
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Updated !\n", strlen("Updated !\n"), 100);
+}
+void sendno(){
+	HAL_UART_Transmit(&huart1, (uint8_t *)"Failed Updating !\n", strlen("Failed Updating !\n"), 100);
+}
+void sendconstants(){
+	char buffer[80];  // make sure size is big enough
+
+	int kp_int = (int)(Kp * 100);
+	int ki_int = (int)(Ki * 100);
+	int kd_int = (int)(Kd * 100);
+
+	int len = sprintf(buffer, "KP=%d.%02d, KI=%d.%02d, KD=%d.%02d\r\n",
+	                  kp_int / 100, abs(kp_int % 100),
+	                  ki_int / 100, abs(ki_int % 100),
+	                  kd_int / 100, abs(kd_int % 100));
+
+	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
+}
+void sendSensorValues(){
+	char buffer[80];
+	int len = sprintf(buffer, "%d %d %d %d %d %d %d %d %d \n",(int)SensorValues[0],(int)SensorValues[1],(int)SensorValues[2],(int)SensorValues[3],(int)SensorValues[4],(int)SensorValues[5],(int)SensorValues[6],(int)SensorValues[7],(int)SensorValues[8]);
+	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
+}
 /* USER CODE END 0 */
 
 /**
@@ -305,8 +414,8 @@ int main(void)
 		  }
 		  if(HAL_GetTick()-LastWifiTime>20){LastWifiTime=HAL_GetTick(); send_telemetry_data_new(position);}
 	  }
-	  if(position>20 && position!=255){turn=1;
-	  }else if(position<-20){turn=-1;}
+	  if(position>0 && position!=255){turn=1;
+	  }else if(position<0){turn=-1;}
 
 	  error = -(position);
 	  computePID(position);
